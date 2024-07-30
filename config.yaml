@@ -1,0 +1,27 @@
+# config.yaml
+# Configuration file for the project
+
+# General settings
+general:
+  project_name: "Your Project Name"
+  version: "1.0.0"
+
+# File paths
+data:
+  data_dir: "./data"
+model:
+  batch_size: 1
+  loss_type: "triplet"
+  base_model: "allenai/specter2_base"
+  num_train_epochs: 3
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  learning_rate: 2e-5
+  weight_decay: 0.01
+  logging_dir: "./logs"
+  logging_steps: 10
+  save_strategy: "epoch"
+  evaluation_strategy: "epoch"
+
+output:
+  output_path: "./output/specter2ft"
