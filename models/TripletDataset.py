@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from models.specter2_ft import Specter2Ft
 from transformers import Trainer, TrainingArguments
 
+
 class TripletDataCollator:
     def __call__(self, batch):
         citing = [item['citing'] for item in batch]
@@ -42,9 +43,11 @@ class CitationTripletDataset(Dataset):
         self.model = AutoModel.from_pretrained(specter2_model_name)
         # self.model.load_adapter("allenai/specter2", load_as="specter2", set_active=True)
         self.model.eval()  # Set to evaluation mode
-        self.cited_paper_candidates = list(set(self.data.cited_paper_abstract.to_list()))
-        self.cited_paper_embeds = self.get_embedddings(self.data, col="cited_paper_abstract")
-        self.citing_paper_embeds = self.get_embedddings(self.data, col="citing_paper_abstract")
+        self.cited_paper_candidates = list(set(self.data.cited_paper_abstracts.to_list()))
+        # self.cited_paper_embeds = self.get_embedddings(self.data, col="cited_paper_abstracts")
+        # self.citing_paper_embeds = self.get_embedddings(self.data, col="proposal")
+        self.citing_paper_embeds = torch.load("proposal_dev.pt")
+        self.cited_paper_embeds = torch.load("cited_paper_abstracts_dev.pt")
 
     def get_embedddings(self, df, col="cited_paper_abstract"):
         embeddings = []
@@ -79,22 +82,22 @@ class CitationTripletDataset(Dataset):
             }
 
     def get_data_row(self, idx):
-        citing_abstract = self.data.iloc[idx]["citing_paper_abstract"]
-        cited_abstract = self.data.iloc[idx]["cited_paper_abstract"]
+        citing_abstract = self.data.iloc[idx]["proposal"]
+        cited_abstract = self.data.iloc[idx]["cited_paper_abstracts"]
         citation_text = self.data.iloc[idx]["citation_text"]
         return citing_abstract, cited_abstract, citation_text
 
     def get_negative_type1(self, idx):
-        citing_abstract =  self.data.iloc[idx]["citing_paper_abstract"]
-        df_sample = self.data[(self.data["citing_paper_abstract"] == citing_abstract) & (self.data["intent"] == 0)]
+        citing_abstract =  self.data.iloc[idx]["proposal"]
+        df_sample = self.data[(self.data["proposal"] == citing_abstract) & (self.data["triple_type"] == 0)]
         if len(df_sample) > 0:
-            return df_sample.sample(1).iloc[0]["cited_paper_abstract"]
+            return df_sample.sample(1).iloc[0]["cited_paper_abstracts"]
         else:
             return ""
 
     def get_negative_type2(self, positive, candidate_embeds):        
         inp = self.tokenizer(positive, truncation=True, padding='max_length', max_length=512, return_tensors='pt')
-        positive_embed = self.model(**inp).last_hidden_state[:, 0, :]
+        positive_embed = self.model(**inp).last_hidden_state[:, 0, :].to("mps")
         similarities = candidate_embeds@positive_embed.T
         # Get top k most similar items
         k = 5  # Number of top items to consider
@@ -110,7 +113,7 @@ class CitationTripletDataset(Dataset):
         # Get the selected ID
         selected_id = top_k_indices[sampled_index].item()
 
-        return self.data.iloc[selected_id]["cited_paper_abstract"]        
+        return self.data.iloc[selected_id]["cited_paper_abstracts"]        
 
     def get_specter2_embeddings(self, texts):
         inputs = self.tokenizer(texts, padding=True, truncation=True, return_tensors="pt", max_length=512)
